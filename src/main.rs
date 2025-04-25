@@ -12,8 +12,6 @@ fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
-        let mut buffer = String::from("HTTP/1.1 200 OK\r\n\r\n");
-
         match stream {
             Ok(mut stream) => {
                 let data = match handle_result(read_from_stream(&mut stream)) {
@@ -24,13 +22,18 @@ fn main() {
                     }
                 };
 
-                let path = data.split_whitespace().nth(1).unwrap();
-                if path == "/" {
-                    buffer = String::from("HTTP/1.1 200 OK\r\n\r\n");
+                let request_line = data.lines().next().unwrap_or_default();
+                let path = request_line.split_whitespace().nth(1).unwrap_or_default();
+
+                let response = if path == "/" {
+                    "HTTP/1.1 200 OK\r\n\r\n"
                 } else {
-                    buffer = String::from("HTTP/1.1 404 Not Found\r\n\r\n");
+                    "HTTP/1.1 404 Not Found\r\n\r\n"
+                };
+
+                if let Err(e) = stream.write_all(response.as_bytes()) {
+                    println!("Failed to write response: {}", e);
                 }
-                stream.write_all(buffer.as_bytes()).unwrap();
             }
             Err(e) => {
                 println!("error: {}", e);
@@ -50,22 +53,13 @@ fn handle_result<T, E: std::fmt::Display>(result: Result<T, E>) -> Option<T> {
 }
 
 fn read_from_stream(stream: &mut TcpStream) -> Result<String, std::io::Error> {
-    let mut buffer = Vec::new();
+    // Set a read timeout to avoid hanging
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(1)))?;
 
-    loop {
-        let mut chunk = vec![0; 1024];
-        match stream.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => {
-                chunk.truncate(n);
-                buffer.extend_from_slice(&chunk);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
-    }
+    let mut buffer = [0; 1024];
+    let n = stream.read(&mut buffer)?;
 
-    // Convert to String
-    String::from_utf8(buffer).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    // Convert bytes read to String
+    String::from_utf8(buffer[0..n].to_vec())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
