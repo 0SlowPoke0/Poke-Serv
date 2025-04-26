@@ -34,7 +34,7 @@ fn main() {
                         length,
                         string_received
                     )
-                } else if path.starts_with("/user-agent") {
+                } else if path.starts_with("/user-agent/") {
                     print!("hi");
                     let user_agent = request_line.split("\r\n").nth(2).unwrap_or_default();
                     if user_agent.is_empty() {
