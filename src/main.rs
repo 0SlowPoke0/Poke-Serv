@@ -21,45 +21,21 @@ fn main() {
                 let request_line = data.lines().next().unwrap_or_default();
                 let path = request_line.split_whitespace().nth(1).unwrap_or_default();
 
-                let response = if path == "/" {
-                    String::from("HTTP/1.1 200 OK\r\n\r\n")
-                } else if path.starts_with("/echo/") {
-                    // Extract the content after "/echo/"
-                    let string_received = path.strip_prefix("/echo/").unwrap_or("");
-                    let length = string_received.len();
-
-                    // Use format! to properly interpolate the variables
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                        length,
-                        string_received
-                    )
-                } else if path == "/user-agent" {
-                    // Parse the HTTP request to find the User-Agent header
-                    let headers: Vec<&str> = data.split("\r\n").collect();
-                    let mut user_agent = "";
-
-                    // Look for the User-Agent header in all headers
-                    for header in headers {
-                        if header.starts_with("User-Agent:") {
-                            user_agent = header.strip_prefix("User-Agent:").unwrap_or("").trim();
-                            break;
-                        }
-                    }
-
-                    if user_agent.is_empty() {
-                        String::from("HTTP/1.1 404 Not Found\r\n\r\n")
-                    } else {
-                        let length = user_agent.len();
-                        format!(
-                            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                            length,
-                            user_agent
-                        )
-                    }
-                } else {
-                    String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+                let response = match path {
+                    "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
+                    "/user-agent" => user_agent_endpoint(data),
+                    _ if path.starts_with("/echo/") => echo_endpoint(data),
+                    _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
                 };
+                // if path == "/" {
+                //     String::from("HTTP/1.1 200 OK\r\n\r\n")
+                // } else if path.starts_with("/echo/") {
+                //     echo_endpoint(data)
+                // } else if path == "/user-agent" {
+                //     user_agent_endpoint(data)
+                // } else {
+                //     String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+                // };
 
                 if let Err(e) = stream.write_all(response.as_bytes()) {
                     println!("Failed to write response: {}", e);
@@ -92,4 +68,37 @@ fn read_from_stream(stream: &mut TcpStream) -> Result<String, std::io::Error> {
     // Convert bytes read to String
     String::from_utf8(buffer[0..n].to_vec())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+fn user_agent_endpoint(data: String) -> String {
+    let headers: Vec<&str> = data.split("\r\n").collect();
+    let mut user_agent = "";
+
+    // Look for the User-Agent header in all headers
+    for header in headers {
+        if header.starts_with("User-Agent:") {
+            user_agent = header.strip_prefix("User-Agent:").unwrap_or("").trim();
+            break;
+        }
+    }
+
+    if user_agent.is_empty() {
+        String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+    } else {
+        let length = user_agent.len();
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+            length, user_agent
+        )
+    }
+}
+
+fn echo_endpoint(data: String) -> String {
+    let string_received = data.strip_prefix("/echo/").unwrap_or("");
+    let length = string_received.len();
+
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+        length, string_received
+    )
 }
