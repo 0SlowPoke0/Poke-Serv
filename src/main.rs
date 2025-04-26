@@ -20,22 +20,7 @@ fn main() {
 
                 let request_line = data.lines().next().unwrap_or_default();
                 let path = request_line.split_whitespace().nth(1).unwrap_or_default();
-
-                let response = match path {
-                    "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
-                    "/user-agent" => user_agent_endpoint(data),
-                    _ if path.starts_with("/echo/") => echo_endpoint(path.to_string()),
-                    _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
-                };
-                // if path == "/" {
-                //     String::from("HTTP/1.1 200 OK\r\n\r\n")
-                // } else if path.starts_with("/echo/") {
-                //     echo_endpoint(data)
-                // } else if path == "/user-agent" {
-                //     user_agent_endpoint(data)
-                // } else {
-                //     String::from("HTTP/1.1 404 Not Found\r\n\r\n")
-                // };
+                let response = handle_endpoint(path, data.clone());
 
                 if let Err(e) = stream.write_all(response.as_bytes()) {
                     println!("Failed to write response: {}", e);
@@ -101,4 +86,13 @@ fn echo_endpoint(data: String) -> String {
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
         length, string_received
     )
+}
+
+fn handle_endpoint(path: &str, data: String) -> String {
+    match path {
+        "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
+        "/user-agent" => user_agent_endpoint(data),
+        _ if path.starts_with("/echo/") => echo_endpoint(path.to_string()),
+        _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
+    }
 }
