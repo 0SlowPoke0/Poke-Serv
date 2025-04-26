@@ -34,6 +34,20 @@ fn main() {
                         length,
                         string_received
                     )
+                } else if path.starts_with("/user-agent") {
+                    let user_agent = request_line.split("\r\n").nth(2).unwrap_or_default();
+                    if user_agent.is_empty() {
+                        String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+                    } else {
+                        let user_agent_details =
+                            user_agent.strip_prefix("User-Agent: ").unwrap_or_default();
+                        let length = user_agent_details.len() - 1;
+                        format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                length,
+                                user_agent_details
+                            )
+                    }
                 } else {
                     String::from("HTTP/1.1 404 Not Found\r\n\r\n")
                 };
