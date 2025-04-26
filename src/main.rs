@@ -24,7 +24,7 @@ fn main() {
                 let response = match path {
                     "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
                     "/user-agent" => user_agent_endpoint(data),
-                    _ if path.starts_with("/echo/") => echo_endpoint(data),
+                    _ if path.starts_with("/echo/") => echo_endpoint(path.to_string()),
                     _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
                 };
                 // if path == "/" {
