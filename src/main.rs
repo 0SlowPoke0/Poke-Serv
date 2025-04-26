@@ -35,6 +35,7 @@ fn main() {
                         string_received
                     )
                 } else if path.starts_with("/user-agent") {
+                    log::info!("User-Agent request received");
                     let user_agent = request_line.split("\r\n").nth(2).unwrap_or_default();
                     if user_agent.is_empty() {
                         String::from("HTTP/1.1 404 Not Found\r\n\r\n")
