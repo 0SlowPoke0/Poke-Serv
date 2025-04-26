@@ -1,9 +1,5 @@
-#[allow(unused_imports)]
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::{
-    arch::x86_64,
-    io::{Read, Write},
-};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -26,9 +22,20 @@ fn main() {
                 let path = request_line.split_whitespace().nth(1).unwrap_or_default();
 
                 let response = if path == "/" {
-                    "HTTP/1.1 200 OK\r\n\r\n"
+                    String::from("HTTP/1.1 200 OK\r\n\r\n")
+                } else if path.starts_with("/echo/") {
+                    // Extract the content after "/echo/"
+                    let string_received = path.strip_prefix("/echo/").unwrap_or("");
+                    let length = string_received.len();
+
+                    // Use format! to properly interpolate the variables
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                        length,
+                        string_received
+                    )
                 } else {
-                    "HTTP/1.1 404 Not Found\r\n\r\n"
+                    String::from("HTTP/1.1 404 Not Found\r\n\r\n")
                 };
 
                 if let Err(e) = stream.write_all(response.as_bytes()) {
