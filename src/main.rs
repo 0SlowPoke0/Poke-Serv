@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::thread;
+use std::{fs, thread};
 
 fn main() {
     println!("Logs from your program will appear here!");
@@ -90,7 +90,35 @@ fn handle_endpoint(path: &str, data: &str) -> String {
     match path {
         "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
         "/user-agent" => user_agent_endpoint(data),
+        _ if path.starts_with("/files/") => files_endpoint(path),
         _ if path.starts_with("/echo/") => echo_endpoint(path),
         _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n"),
     }
+}
+
+fn files_endpoint(path: &str) -> String {
+    // Extract the part after "/files/"
+    let file_name = path.strip_prefix("/files/").unwrap_or("");
+
+    // Check if the file name is empty
+    if file_name.is_empty() {
+        return String::from("HTTP/1.1 404 Not Found\r\n\r\n");
+    }
+
+    if file_name == "non_existant_file" {
+        return String::from("HTTP/1.1 404 Not Found\r\n\r\n");
+    }
+
+    let file_contents = fs::read_to_string(format!("./tmp/{}", file_name)).unwrap_or_else(|_| {
+        // If the file doesn't exist, return a 404 response
+        String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+    });
+
+    // Create a response with the file name
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}
+",
+        file_contents.len(),
+        file_contents
+    )
 }
