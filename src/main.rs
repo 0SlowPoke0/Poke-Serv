@@ -23,6 +23,7 @@ fn main() {
                 let request_line = data.lines().next().unwrap_or_default();
                 let path = request_line.split_whitespace().nth(1).unwrap_or_default();
                 let response = handle_endpoint(path, data.clone());
+                stream.write_all(response.as_bytes());
 
                 if let Err(e) = stream.write_all(response.as_bytes()) {
                     println!("Failed to write response: {}", e);
