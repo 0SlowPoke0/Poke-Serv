@@ -105,20 +105,19 @@ fn files_endpoint(path: &str) -> String {
         return String::from("HTTP/1.1 404 Not Found\r\n\r\n");
     }
 
-    if file_name == "non_existant_file" {
-        return String::from("HTTP/1.1 404 Not Found\r\n\r\n");
+    // Attempt to read the file
+    match fs::read_to_string(format!("./tmp/{}", file_name)) {
+        Ok(contents) => {
+            // Create a response with the file contents
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}",
+                contents.len(),
+                contents
+            )
+        }
+        Err(_) => {
+            // If the file doesn't exist or can't be read, return a 404 response
+            String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+        }
     }
-
-    let file_contents = fs::read_to_string(format!("./tmp/{}", file_name)).unwrap_or_else(|_| {
-        // If the file doesn't exist, return a 404 response
-        String::from("HTTP/1.1 404 Not Found\r\n\r\n")
-    });
-
-    // Create a response with the file name
-    format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n{}
-",
-        file_contents.len(),
-        file_contents
-    )
 }
