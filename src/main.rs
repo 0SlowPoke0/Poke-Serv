@@ -10,8 +10,8 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                let buf = b"HTTP/1.1 200 OK\r\n\r\n";
-                stream.write_all(buf);
+                // let buf = b"HTTP/1.1 200 OK\r\n\r\n";
+                // stream.write_all(buf);
                 let data = match handle_result(read_from_stream(&mut stream)) {
                     Some(data) => data,
                     None => {
