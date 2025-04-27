@@ -10,21 +10,23 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
-                let data = match handle_result(read_from_stream(&mut stream)) {
-                    Some(data) => data,
-                    None => {
-                        println!("Failed to read from stream");
-                        continue;
-                    }
-                };
+                let buf = b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n";
+                stream.write_all(buf);
+                // let data = match handle_result(read_from_stream(&mut stream)) {
+                //     Some(data) => data,
+                //     None => {
+                //         println!("Failed to read from stream");
+                //         continue;
+                //     }
+                // };
 
-                let request_line = data.lines().next().unwrap_or_default();
-                let path = request_line.split_whitespace().nth(1).unwrap_or_default();
-                let response = handle_endpoint(path, data.clone());
+                // let request_line = data.lines().next().unwrap_or_default();
+                // let path = request_line.split_whitespace().nth(1).unwrap_or_default();
+                // let response = handle_endpoint(path, data.clone());
 
-                if let Err(e) = stream.write_all(response.as_bytes()) {
-                    println!("Failed to write response: {}", e);
-                }
+                // if let Err(e) = stream.write_all(response.as_bytes()) {
+                //     println!("Failed to write response: {}", e);
+                // }
             }
             Err(e) => {
                 println!("error: {}", e);
