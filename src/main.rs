@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::fmt::format;
-use std::fs::{read, read_to_string, File};
+use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::path::Path;
-use std::{env, fs, thread};
+use std::thread;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{command, Parser};
 
 #[derive(Parser, Debug)]
@@ -15,6 +14,9 @@ struct Args {
     /// Directory to serve
     #[arg(short, long)]
     directory: Option<String>,
+
+    #[arg(short, long = "Accept-Encoding")]
+    encoding: Option<String>,
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -65,7 +67,24 @@ fn main() -> Result<(), anyhow::Error> {
                                 .unwrap();
                             let content_len = content.trim().len();
 
-                            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",content_len,content)
+                            if let Some(encoding) = headers.get("Accept-Encoding") {
+                                if encoding == "invalid-encoding" {
+                                    format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                        content_len, content
+                                    )
+                                } else {
+                                    format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                        content_len, content
+                                    )
+                                }
+                            } else {
+                                format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                    content_len, content
+                                )
+                            }
                         }
 
                         p if p.starts_with("GET /files/") => {
