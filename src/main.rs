@@ -7,6 +7,8 @@ use std::thread;
 
 use anyhow::Result;
 use clap::{command, Parser};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -21,7 +23,6 @@ struct Args {
 
 fn main() -> Result<(), anyhow::Error> {
     let listener = TcpListener::bind("127.0.0.1:4221")?;
-
     let mut count = 0;
 
     for stream in listener.incoming() {
@@ -32,18 +33,20 @@ fn main() -> Result<(), anyhow::Error> {
 
                 thread::spawn(move || -> Result<(), anyhow::Error> {
                     let args = Args::parse();
-                    let mut reader = BufReader::new(&stream); // Make reader mutable
+                    let mut reader = BufReader::new(&stream);
                     let mut request_line = String::new();
                     reader.read_line(&mut request_line)?;
 
                     let request_line = request_line.trim();
                     let mut headers = HashMap::new();
+
+                    // Parse headers
                     loop {
                         let mut header_line = String::new();
                         reader.read_line(&mut header_line)?;
                         let trimmed_line = header_line.trim();
                         if trimmed_line.is_empty() {
-                            break; // This is the \r\n\r\n, end of headers
+                            break;
                         }
                         let parts: Vec<&str> = trimmed_line.splitn(2, ':').collect();
                         if parts.len() == 2 {
@@ -52,11 +55,20 @@ fn main() -> Result<(), anyhow::Error> {
                         }
                     }
 
-                    let response = match &request_line[..] {
-                        "GET / HTTP/1.1" => format!("HTTP/1.1 200 OK\r\n\r\n"),
+                    // Main response logic — all arms return Vec<u8>
+                    let response: Vec<u8> = match &request_line[..] {
+                        "GET / HTTP/1.1" => b"HTTP/1.1 200 OK\r\n\r\n".to_vec(),
+
                         p if p.starts_with("GET /user-agent") => {
                             let user_agent = headers.get("User-Agent").unwrap();
-                            format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",user_agent.len(),user_agent)
+                            let body = user_agent.as_bytes();
+                            let header = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n",
+                                body.len()
+                            );
+                            let mut res = header.into_bytes();
+                            res.extend_from_slice(body);
+                            res
                         }
 
                         p if p.starts_with("GET /echo/") => {
@@ -64,31 +76,53 @@ fn main() -> Result<(), anyhow::Error> {
                                 .strip_prefix("GET /echo/")
                                 .unwrap()
                                 .strip_suffix("HTTP/1.1")
-                                .unwrap();
-                            let content_len = content.trim().len();
+                                .unwrap()
+                                .trim();
 
                             if let Some(encoding) = headers.get("Accept-Encoding") {
-                                if encoding.split(",").map(|t| t.trim()).any(|t| t == "gzip") {
-                                    format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                        content_len, content
-                                    )
+                                if encoding.split(',').map(|t| t.trim()).any(|t| t == "gzip") {
+                                    // gzip compression
+                                    let mut encoder =
+                                        GzEncoder::new(Vec::new(), Compression::default());
+                                    encoder.write_all(content.as_bytes())?;
+                                    let compressed_bytes = encoder.finish()?;
+
+                                    let header = format!(
+                                        "HTTP/1.1 200 OK\r\n\
+                                         Content-Encoding: gzip\r\n\
+                                         Content-Type: text/plain\r\n\
+                                         Content-Length: {}\r\n\r\n",
+                                        compressed_bytes.len()
+                                    );
+                                    let mut res = header.into_bytes();
+                                    res.extend_from_slice(&compressed_bytes);
+                                    res
                                 } else {
-                                    format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                        content_len, content
-                                    )
+                                    // plain text fallback
+                                    let body = content.as_bytes();
+                                    let header = format!(
+                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n",
+                                        body.len()
+                                    );
+                                    let mut res = header.into_bytes();
+                                    res.extend_from_slice(body);
+                                    res
                                 }
                             } else {
-                                format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                                    content_len, content
-                                )
+                                // no encoding header
+                                let body = content.as_bytes();
+                                let header = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n",
+                                    body.len()
+                                );
+                                let mut res = header.into_bytes();
+                                res.extend_from_slice(body);
+                                res
                             }
                         }
 
                         p if p.starts_with("GET /files/") => {
-                            let directory_path = args.directory.unwrap();
+                            let directory_path = args.directory.unwrap_or_else(|| ".".to_string());
                             let directory = directory_path.trim();
                             let file_name = p
                                 .strip_prefix("GET /files/")
@@ -101,18 +135,22 @@ fn main() -> Result<(), anyhow::Error> {
                             let path = Path::new(&file_path);
 
                             if !path.exists() {
-                                format!("HTTP/1.1 404 Not Found\r\n\r\n")
+                                b"HTTP/1.1 404 Not Found\r\n\r\n".to_vec()
                             } else {
-                                let mut content = BufReader::new(File::open(path).unwrap());
-                                let mut data_string = String::new();
-                                let _ = content.read_to_string(&mut data_string).unwrap();
-                                let content_len = data_string.trim().len();
-                                format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {content_len}\r\n\r\n{data_string}")
+                                let mut data = Vec::new();
+                                File::open(path)?.read_to_end(&mut data)?;
+                                let header = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+                                    data.len()
+                                );
+                                let mut res = header.into_bytes();
+                                res.extend_from_slice(&data);
+                                res
                             }
                         }
 
-                        p if p.starts_with("POST /files") => {
-                            let directory_path = args.directory.unwrap();
+                        p if p.starts_with("POST /files/") => {
+                            let directory_path = args.directory.unwrap_or_else(|| ".".to_string());
                             let directory = directory_path.trim();
                             let file_name = p
                                 .strip_prefix("POST /files/")
@@ -121,46 +159,33 @@ fn main() -> Result<(), anyhow::Error> {
                                 .unwrap()
                                 .trim();
 
-                            println!("{}", file_name);
-
                             let content_length: usize = headers
                                 .get("Content-Length")
                                 .and_then(|v| v.parse().ok())
                                 .unwrap_or(0);
 
-                            // 1. Read from the BufReader, not the underlying stream
                             let mut body = vec![0u8; content_length];
                             reader.read_exact(&mut body)?;
-                            // let mut body = vec![0u8; content_length];
-                            // reader.get_ref().read_exact(&mut body)?;
-
-                            let body_str = String::from_utf8_lossy(&body);
 
                             let file_path = format!("{}/{}", directory, file_name);
                             let path = Path::new(&file_path);
 
-                            println!("am i reaching here");
-                            println!("{:?}", path);
-
-                            // std::fs::create_dir_all(directory_path)?;
                             if let Ok(mut file) = File::create(path) {
-                                let _ = file.write_all(body_str.as_bytes());
-                                String::from("HTTP/1.1 201 Created\r\n\r\n")
+                                file.write_all(&body)?;
+                                b"HTTP/1.1 201 Created\r\n\r\n".to_vec()
                             } else {
-                                String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+                                b"HTTP/1.1 404 Not Found\r\n\r\n".to_vec()
                             }
                         }
 
-                        _ => format!("HTTP/1.1 404 Not Found\r\n\r\n"),
+                        _ => b"HTTP/1.1 404 Not Found\r\n\r\n".to_vec(),
                     };
 
-                    stream.write_all(response.as_bytes())?;
+                    stream.write_all(&response)?;
                     Ok(())
                 });
             }
-            Err(e) => {
-                println!("Connection error: {}", e);
-            }
+            Err(e) => eprintln!("Connection error: {}", e),
         }
     }
 
