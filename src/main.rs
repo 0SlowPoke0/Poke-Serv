@@ -68,14 +68,14 @@ fn main() -> Result<(), anyhow::Error> {
                             let content_len = content.trim().len();
 
                             if let Some(encoding) = headers.get("Accept-Encoding") {
-                                if encoding == "invalid-encoding" {
+                                if encoding.split(",").map(|t| t.trim()).any(|t| t == "gzip") {
                                     format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                        "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                                         content_len, content
                                     )
                                 } else {
                                     format!(
-                                        "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
                                         content_len, content
                                     )
                                 }
