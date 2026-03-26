@@ -1,79 +1,178 @@
-[![progress-banner](https://backend.codecrafters.io/progress/http-server/cb7cf933-1eb8-417d-a114-99161c202c0b)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# Concurrent HTTP/1.1 Server in C
 
-This is a starting point for Rust solutions to the
-["Build Your Own HTTP server" Challenge](https://app.codecrafters.io/courses/http-server/overview).
+A lightweight, multi-client HTTP/1.1 server built from scratch in C using POSIX sockets.
+This project focuses on low-level networking, protocol parsing, and concurrent request handling.
 
-# High-Performance HTTP/1.1 Web Server in Rust
+---
 
-A custom, multi-threaded HTTP/1.1 web server built from the ground up in Rust, designed to explore high-performance networking, concurrency, and I/O handling. This project showcases building a robust web server from raw TCP sockets, featuring a custom HTTP parser, static file serving, and dynamic GZIP compression.
+## 🚀 Overview
 
-To quantify its capabilities and understand architectural trade-offs, the server underwent a series of rigorous benchmarks and stress tests, comparing its performance directly against a Node.js server.
+This server implements core parts of the HTTP/1.1 protocol, including request parsing, routing, and response generation. It supports concurrent client handling using threads and demonstrates system-level programming concepts such as socket communication, dynamic memory management, and file I/O.
 
-## 🚀 Performance Benchmarks & Key Learnings
+---
 
-The tests consistently demonstrated the Rust server's superior performance and resilience, offering valuable insights into system-level programming and concurrency models.
+## ⚙️ Features
 
-### 1. Standard Throughput Test (10KB file, 100 concurrent clients)
+* **Concurrent Client Handling**
 
-This initial benchmark measured the raw requests per second (RPS) both servers could handle when serving a small static file.
+  * Multi-client support using `pthread` (thread-per-client model)
 
-<img width="256" height="256" alt="Gemini_Generated_Image_m2cxipm2cxipm2cx" src="https://github.com/user-attachments/assets/e92a6be4-5103-4872-8ed1-f24b6ff6d5ae" />
+* **HTTP Request Parsing**
 
+  * Parses request line (method, path)
+  * Extracts headers and `Content-Length`
+  * Handles CRLF-based header termination
 
-| Server | Requests/sec |
-| :--- | :--- |
-| Rust Server | ~6,709 |
-| Node.js | ~2,353 |
+* **Supported Endpoints**
 
-**Learning:** The Rust server achieved **2.8x higher throughput** than Node.js. This highlights Rust's advantage as a compiled language, executing native code directly on the CPU with minimal runtime overhead, compared to Node.js's JavaScript engine.
+  * `/` → Basic 200 OK response
+  * `/echo/<msg>` → Echo response
+  * `/user-agent` → Returns client user-agent
+  * `/files/<filename>` → File read/write support
 
-### 2. Heavy Load Stress Test (10KB file, 500 concurrent clients)
+* **GET & POST Support**
 
-This test pushed both servers with a higher number of concurrent connections to assess their stability and latency under stress.
+  * GET for fetching resources
+  * POST for writing file contents
 
-<img width="256" height="256" alt="Gemini_Generated_Image_5m54we5m54we5m54" src="https://github.com/user-attachments/assets/46446494-6ac9-450a-afc0-2ab361315226" />
+* **File Handling**
 
+  * Static file serving
+  * Binary-safe file reads/writes
+  * Dynamic file path construction
 
-| Metric | Rust Server | Node.js Server | Result |
-| :--- | :--- | :--- | :--- |
-| Throughput (RPS) | ~4,840 | ~3,154 | **53% Higher RPS** |
-| Average Latency | 20.6 ms | 41.0 ms | **2x Lower Latency** |
-| 99th Percentile Latency | 27.6 ms | 54.3 ms | **2x More Consistent** |
+* **Dynamic Buffer Management**
 
-**Learning:** Even under heavy load, the Rust server sustained significantly higher throughput and delivered a consistently faster user experience. This demonstrates the effectiveness of Rust's true multi-threading model (thread-per-client) in achieving parallel execution, contrasting with Node.js's single-threaded event loop which, while efficient, eventually hits CPU-bound limits under intense computational or management overhead.
+  * Custom resizable buffer (`dynarr`) for request/response handling
 
-### 3. Large File I/O Throughput Test (50MB file, 500 concurrent clients)
+---
 
-This test focused on data transfer capabilities, pushing the limits of disk I/O and network bandwidth.
+## 🧠 Key Concepts Implemented
 
-<img width="256" height="256" alt="Gemini_Generated_Image_m2cxipm2cxipm2cx (2)" src="https://github.com/user-attachments/assets/14066c93-7e70-4508-a344-a68add5f61e7" />
+* Low-level socket programming (`socket`, `bind`, `listen`, `accept`)
+* Concurrent execution using `pthread`
+* HTTP protocol parsing and response formatting
+* Memory management using `malloc`, `realloc`, `free`
+* File I/O using `fopen`, `fread`, `fwrite`
+* Robust request handling using header-body separation
 
+---
 
-| Metric | Rust Server |
-| :--- | :--- |
-| Data Throughput | **1.27 GiB/s** |
+## 🏗️ Project Architecture
 
-**Learning:** The Rust server achieved a massive throughput of **1.27 Gigabytes per second**. This indicates an extremely efficient I/O pipeline, where the software overhead is minimal, and performance is primarily bottlenecked by the underlying hardware (SSD read speed and network interface), rather than the server's code.
+```
+.
+├── main.c           # Server setup, connection handling
+├── parser.c         # HTTP request parsing logic
+├── resp_build.c     # Response construction (echo, file, headers)
+├── vector.c         # Dynamic buffer implementation
+```
 
-### 4. Hardcore Stability Test (50MB file, 4,000 concurrent clients)
+### Key Components
 
-<img width="256" height="256" alt="Gemini_Generated_Image_m2cxipm2cxipm2cx (1)" src="https://github.com/user-attachments/assets/cec0b2f5-b38a-402f-acbf-94f3f2fc813d" />
+* **Connection Layer**
 
+  * Accepts client connections and spawns threads
 
-| Metric | Rust Server | 
-| :--- | :--- |
-| Success Rate | **100%** |
-| Sustained Throughput | **1.17 GiB/s** |
+* **Request Handling**
 
-**Learning:** Despite the immense pressure of 4,000 simultaneous clients each downloading a 50MB file, the Rust server maintained a **100% success rate** and sustained an incredible data transfer rate. This highlights the inherent stability and resource efficiency of Rust applications, even with a thread-per-client model that can become latency-bound under such conditions. It demonstrated that the server would not crash or drop connections, proving its fundamental robustness.
+  * Reads raw bytes from socket
+  * Detects end of headers (`\r\n\r\n`)
+  * Parses body using `Content-Length`
 
+* **Routing Logic**
 
+  * Matches request paths to handlers
 
-## 💡 Architectural Insights & Future Directions
+* **Response Builder**
 
-This project successfully demonstrates that a custom-built Rust server can deliver exceptional performance and stability, often surpassing higher-level runtimes in raw speed and efficiency. The "thread-per-client" model proved surprisingly robust for I/O-bound tasks and heavy loads.
+  * Generates HTTP-compliant responses with headers and body
 
-However, the benchmarks also illuminated the architectural trade-offs: while highly stable, the latency for individual requests increased under extreme concurrency as thousands of threads contended for CPU resources. This finding provides a data-driven rationale for the next steps: exploring more advanced concurrency patterns.
+---
 
-Future improvements include:
-* Implementing a **thread pool** to manage a fixed set of worker threads more efficiently.
+## 🔄 Request Flow
+
+1. Client connects via TCP
+2. Server reads request into dynamic buffer
+3. Headers parsed → body length determined
+4. Request routed based on path
+5. Response constructed
+6. Response sent back to client
+
+---
+
+## 🧪 Example Requests
+
+### Echo
+
+```
+GET /echo/hello HTTP/1.1
+```
+
+Response:
+
+```
+HTTP/1.1 200 OK
+Content-Type: text/plain
+
+hello
+```
+
+---
+
+### File Read
+
+```
+GET /files/test.txt HTTP/1.1
+```
+
+---
+
+### File Write
+
+```
+POST /files/test.txt HTTP/1.1
+Content-Length: 5
+
+hello
+```
+
+---
+
+## 🛠️ Build & Run
+
+```bash
+gcc -o server main.c parser.c resp_build.c vector.c -lpthread
+./server --directory ./data
+```
+
+Server runs on:
+
+```
+localhost:4221
+```
+
+---
+
+## ⚡ Key Learnings
+
+* Understanding of HTTP protocol internals
+* Handling partial socket reads and request boundaries
+* Managing concurrency with threads
+* Designing modular and extensible system components
+* Debugging low-level networking code
+
+---
+
+## 🚀 Future Improvements
+
+* Thread pool instead of thread-per-client
+* HTTP keep-alive support
+* Improved error handling and logging
+* Support for more HTTP methods and headers
+
+---
+
+## 📌 Summary
+
+This project demonstrates building a fully functional HTTP server from scratch using low-level system primitives. It highlights strong understanding of networking, concurrency, and protocol design.
